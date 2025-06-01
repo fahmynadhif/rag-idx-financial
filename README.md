@@ -169,7 +169,7 @@ Akses aplikasi di browser: [http://localhost:8501](http://localhost:8501)
 ## 🔍 Contoh UI
   
 ```
-![Contoh UI](images/contoh.png)
+![Contoh UI](image/contoh.png)
 ```
 ---
 
