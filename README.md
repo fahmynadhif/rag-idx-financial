@@ -169,7 +169,7 @@ Akses aplikasi di browser: [http://localhost:8501](http://localhost:8501)
 ## 🔍 Contoh UI
   
 ```
-!Terdapat pada folder (image/BRI_net.png)
+Terdapat pada folder (image/BRI_net.png)
 ```
 ---
 
