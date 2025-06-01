@@ -1,0 +1,100 @@
+services:
+  etcd:
+    container_name: milvus-etcd
+    image: quay.io/coreos/etcd:v3.5.18
+    environment:
+      - ETCD_AUTO_COMPACTION_MODE=revision
+      - ETCD_AUTO_COMPACTION_RETENTION=1000
+      - ETCD_QUOTA_BACKEND_BYTES=4294967296
+      - ETCD_SNAPSHOT_COUNT=50000
+    volumes:
+      - ${DOCKER_VOLUME_DIRECTORY:-.}/volumes/etcd:/etcd
+    command: etcd -advertise-client-urls=http://127.0.0.1:2379 -listen-client-urls http://0.0.0.0:2379 --data-dir /etcd
+    healthcheck:
+      test: ["CMD", "etcdctl", "endpoint", "health"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+    networks:
+      - milvus-network
+
+  minio:
+    container_name: milvus-minio
+    image: minio/minio:RELEASE.2023-03-20T20-16-18Z
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    ports:
+      - "9041:9041"  # Console port
+      - "9040:9040"  # Main service port
+    volumes:
+      - ${DOCKER_VOLUME_DIRECTORY:-.}/volumes/minio:/minio_data
+    command: minio server /minio_data --console-address ":9041" --address ":9040"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9040/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+    security_opt:
+      - seccomp:unconfined
+      - apparmor:unconfined
+    networks:
+      - milvus-network
+
+  attu:
+    image: zilliz/attu:v2.4.7
+    container_name: milvus-attu
+    ports:
+      - "3005:3000"  # Expose the Attu web UI
+    environment:
+      - SERVER_PORT=3000  # The port Attu listens on
+      - MILVUS_SERVER=standalone  # Address of the Milvus service
+      - MILVUS_PORT=19530        # Milvus default port
+      - MILVUS_USER=root               # ✅ Add this
+      - MILVUS_PASSWORD=Milvus         # ✅ And this
+    depends_on:
+      - "standalone"
+    networks:
+      - milvus-network
+
+  standalone:
+    container_name: milvus-standalone
+    image: milvusdb/milvus:v2.5.6-gpu
+    command: ["milvus", "run", "standalone"]
+    security_opt:
+      - seccomp:unconfined
+    environment:
+      ETCD_ENDPOINTS: etcd:2379
+      MINIO_ADDRESS: minio:9040  # Updated to match the MinIO main service port
+      MILVUS_USERNAME: root
+      MILVUS_PASSWORD: Milvus
+    volumes:
+      - ${DOCKER_VOLUME_DIRECTORY:-.}/milvus-config.yaml:/milvus/configs/milvus.yaml
+      - ${DOCKER_VOLUME_DIRECTORY:-.}/volumes/milvus:/var/lib/milvus
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9091/healthz"]
+      interval: 30s
+      start_period: 90s
+      timeout: 20s
+      retries: 3
+    ports:
+      - "19530:19530"
+      - "9091:9091"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              capabilities: ["gpu"]
+              device_ids: ["0"]
+    depends_on:
+      etcd:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    networks:
+      - milvus-network
+
+networks:
+  milvus-network:
+    name: milvus-network
